@@ -131,15 +131,153 @@
     (set/difference #{1 2 3 4 5 6 7 8 9} non-valid-nums)
     ))
 
-(defn valid-updation-list
-  [org-board board position]
-  (when (insert-update-board org-board board position "0")
-    (let [flatten-lst (mapv #(vec (flatten %)) board)
-          trp-lst (vec (apply map vector flatten-lst))])))
+(defn check-complete-suduko
+  [board]
+  (let [chk-lst (sort (flatten (mapv #(conj (flatten %)) board)))]
+    (if (and (not= "0" (first chk-lst)) (validate-board board))
+      true
+      false)))
+
+
+(defn solve-suduko
+  [board]
+  (let [*run-board (atom board)
+        *change (atom 0)]
+    (doseq [x (vec (range 9))
+            y [0 1 2]
+            z [0 1 2]]
+      (let [value (get-in @*run-board [x y z])
+            valid-vals (get-valid-nums @*run-board [x y z])]
+        (when (and (= 1 (count valid-vals)) (= value "0"))
+          (reset! *run-board (insert-update-board board 
+                                                  @*run-board [x y z] 
+                                                  (str (first valid-vals))))
+          (reset! *change 1))))
+    (if (= 1 @*change)
+      (solve-suduko @*run-board)
+      @*run-board)
+    ))
+
+
+(defonce *solved-puzzel (atom nil))
+
+
+(defn solve-suduko3
+  [board set-count]
+  (if @*solved-puzzel
+    nil
+    (let [*run-board (atom board)
+          *change (atom 0)]
+      (doseq [x (vec (range 9))
+              y [0 1 2]
+              z [0 1 2]
+              :when (not= @*change -1)]
+        (if @*solved-puzzel
+          nil
+          (let [value (get-in @*run-board [x y z])
+                valid-vals (get-valid-nums @*run-board [x y z])]
+            (if (and (= 0 (count valid-vals)) (= value "0"))
+              (reset! *change -1)
+              (when (and (= set-count (count valid-vals)) (= value "0"))
+                (doseq [v valid-vals]
+                  (if @*solved-puzzel
+                    nil
+                    (do 
+                      (reset! *run-board (insert-update-board board
+                                                              @*run-board [x y z]
+                                                              (str v)))
+                      (when (not= 1 (count valid-vals))
+                        (solve-suduko3 @*run-board 1)
+                        nil)))
+                  (reset! *change 1)))))))
+      (if @*solved-puzzel
+        nil
+        (if (= 1 @*change)
+          (do
+            (solve-suduko3 @*run-board 1)
+            nil)
+          (if (check-complete-suduko @*run-board)
+            (reset! *solved-puzzel @*run-board)
+            (if (= -1 @*change)
+              nil
+              (if @*solved-puzzel
+                nil
+                (do
+                  (solve-suduko3 @*run-board (inc set-count))
+                  nil)))))))))
+
+
+
+
+(defn generate-solved-boards
+  [board set-count num]
+  (if (= count @*solved-puzzel)
+    nil
+    (let [*run-board (atom board)
+          *change (atom 0)]
+      (doseq [x (vec (range 9))
+              y [0 1 2]
+              z [0 1 2]
+              :when (not= @*change -1)]
+        (if (= count @*solved-puzzel)
+          nil
+          (let [value (get-in @*run-board [x y z])
+                valid-vals (get-valid-nums @*run-board [x y z])]
+            (if (and (= 0 (count valid-vals)) (= value "0"))
+              (reset! *change -1)
+              (when (and (= set-count (count valid-vals)) (= value "0"))
+                (doseq [v valid-vals]
+                  (if (= count @*solved-puzzel)
+                    nil
+                    (do
+                      (reset! *run-board (insert-update-board board
+                                                              @*run-board [x y z]
+                                                              (str v)))
+                      (when (not= 1 (count valid-vals))
+                        (generate-solved-boards @*run-board 1 num)
+                        nil)))
+                  (reset! *change 1)))))))
+      (if (= count @*solved-puzzel)
+        nil
+        (if (= 1 @*change)
+          (do
+            (generate-solved-boards @*run-board 1 num)
+            nil)
+          (if (check-complete-suduko @*run-board)
+            (if @*solved-puzzel
+              (reset! *solved-puzzel [@*run-board])
+              (reset! *solved-puzzel (conj @*solved-puzzel @*run-board)))
+            (if (= -1 @*change)
+              nil
+              (if (= count @*solved-puzzel)
+                nil
+                (do
+                  (generate-solved-boards @*run-board (inc set-count) num)
+                  nil)))))))))
+
+
+
+
+(defn solve-suduko2
+  [board set-count]
+  (solve-suduko3 board set-count))
+
+
+
+
+(defn print-all-valid-nums
+  [board]
+  (for [x (vec (range 9))
+        y [0 1 2]
+        z [0 1 2]
+        :let [valid-nums (get-valid-nums board [x y z])]]
+    (when (= "0" (get-in board [x y z]))
+      (println valid-nums))
+    ))
 
 
 (comment
-  
+
   (let [board1 (generate-board "003020600
 900305001
 001806400
@@ -149,13 +287,51 @@
 002609500
 800203009
 005010300")
-        board2 (generate-board "020030090\n000907000\n900208005\n004806500\n607000208\n003102900\n800605007\n000309000\n030020050\n")
+        board2 (generate-board "000900002\n050123400\n030000160\n908000000\n070000090\n000000205\n091000050\n007439020\n400007000\n")
+
         upd-board (insert-in board1 [0 0 1] "0")
         org-true? (original-maintained? board1 upd-board)
         sec-lst (valid-nums-in-sector board1 [7 2 1])
-        lst (get-valid-nums board1 [4 0 2])
-        ]
-    lst)
+        lst (get-valid-nums board1 [4 0 2])]
+    
+    (check-complete-suduko (solve-suduko board2)))
+  
+(check-complete-suduko (solve-suduko (generate-board "000020040\n008035000\n000070602\n031046970\n200000000\n000501203\n049000730\n000000010\n800004000\n")))
+
+  (solve-suduko2 [[["0" "0" "0"] ["9" "0" "0"] ["0" "0" "2"]]
+                  [["0" "5" "0"] ["1" "2" "3"] ["4" "0" "0"]]
+                  [["0" "3" "0"] ["0" "0" "0"] ["1" "6" "0"]]
+                  [["9" "0" "8"] ["0" "0" "0"] ["0" "0" "0"]]
+                  [["0" "7" "0"] ["0" "0" "0"] ["0" "9" "0"]]
+                  [["0" "0" "0"] ["0" "0" "0"] ["2" "0" "5"]]
+                  [["0" "9" "1"] ["0" "0" "0"] ["0" "5" "0"]]
+                  [["0" "0" "7"] ["4" "3" "9"] ["0" "2" "0"]]
+                  [["4" "0" "0"] ["0" "0" "7"] ["0" "0" "0"]]] 1)
+
+(do
+  (generate-solved-boards  [[["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]
+                            [["0" "0" "0"] ["0" "0" "0"] ["0" "0" "0"]]] 1 10)
+  (println @*solved-puzzel))
+  
+  (print-all-valid-nums [[["0" "0" "0"] ["9" "0" "0"] ["0" "0" "2"]]
+                         [["0" "5" "0"] ["1" "2" "3"] ["4" "0" "0"]]
+                         [["0" "3" "0"] ["0" "0" "0"] ["1" "6" "0"]]
+                         [["9" "0" "8"] ["0" "0" "0"] ["0" "0" "0"]]
+                         [["0" "7" "0"] ["0" "0" "0"] ["0" "9" "0"]]
+                         [["0" "0" "0"] ["0" "0" "0"] ["2" "0" "5"]]
+                         [["0" "9" "1"] ["0" "0" "0"] ["0" "5" "0"]]
+                         [["0" "0" "7"] ["4" "3" "9"] ["0" "2" "0"]]
+                         [["4" "0" "0"] ["0" "0" "7"] ["0" "0" "0"]]])
+
+
+(validate-board [[[7 1 4] [9 6 8] [5 3 2]] [[8 5 6] [1 2 3] [4 7 9]] [[2 3 9] [7 4 5] [1 6 8]] [[9 4 8] [6 0 2] [3 1 7]] [[1 7 2] [3 5 4] [8 9 6]] [[0 6 3] [8 7 1] [2 4 5]] [[3 9 1] [2 8 6] [7 5 4]] [[5 8 7] [4 3 9] [6 2 1]] [[4 2 0] [5 1 7] [9 8 3]]])
   (random-board)
   )
 
